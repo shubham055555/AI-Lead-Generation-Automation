@@ -1,0 +1,562 @@
+{
+  "name": "AI Lead Generation & Email Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "2d457370-c66e-4f6c-8878-741342fccc65",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1200,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  return {\n    json: {\n      name: item.json.Name,\n      email: item.json.Email,\n      company: item.json.Company,\n      title: item.json.Title,\n      source: 'google_sheets'\n    }\n  };\n});"
+      },
+      "id": "af29cbf8-46e6-49e0-9b8a-f50f5787509d",
+      "name": "Normalize Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -752,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "let text = $json.response || \"\";\n\n// Remove markdown\ntext = text.replace(/```json|```/g, \"\").trim();\n\nconst match = text.match(/{[\\s\\S]*}/);\n\nlet ai = { score: 0, fit: \"cold\", reason: \"\", opener: \"\" };\n\nif (match) {\n  try {\n    ai = JSON.parse(match[0]);\n\n    if (ai.score <= 1) {\n      ai.score = Math.round(ai.score * 100);\n    }\n\n  } catch (e) {}\n}\n\nreturn {\n  json: {\n    // ORIGINAL DATA (IMPORTANT 🔥)\n    name: $json.name,\n    email: $json.email,\n    company: $json.company,\n    title: $json.title,\n\n    // AI DATA\n    score: ai.score,\n    fit: ai.fit,\n    reason: ai.reason,\n    opener: ai.opener\n  }\n};"
+      },
+      "id": "a81cb853-66a4-4422-aa14-66bd3cf2075d",
+      "name": "Parse AI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.score}}",
+              "operation": "larger",
+              "value2": 70
+            }
+          ]
+        }
+      },
+      "id": "e9fe0586-6a4a-405d-bdd3-cbd295175d8d",
+      "name": "IF Score",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        144,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "editaura330@gmail.com",
+        "toEmail": "={{ $json.fields.Email }}",
+        "subject": "=Quick thought on  {{ $json.fields.Company }}",
+        "text": "=Hi {{ $json.fields.Name }},\n\n{{ $json.fields.Opener }}\n\nWe help companies automate workflows using AI.\n\nWorth a quick 15-min call?\n\n- Shubham",
+        "options": {}
+      },
+      "id": "7783ae6f-fc40-478d-90dd-d52c26f7bf41",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        592,
+        0
+      ],
+      "webhookId": "c5155ff7-696a-4fe9-a32f-3c0b3c3ec8cf",
+      "credentials": {
+        "smtp": {
+          "id": "eAeFoMXCRkFebUlh",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "12644kZaTP0LgpB23vmwwzzlx1vYcdL2bRvHXXbUfaOc",
+          "mode": "list",
+          "cachedResultName": "Lead Generation __",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/12644kZaTP0LgpB23vmwwzzlx1vYcdL2bRvHXXbUfaOc/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/12644kZaTP0LgpB23vmwwzzlx1vYcdL2bRvHXXbUfaOc/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -976,
+        96
+      ],
+      "id": "4e33e102-614f-42b4-bdba-8ab8afe44297",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "lCuufUmmFPvkyclt",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"qwen2.5-coder:1.5b\",\n  \"prompt\": \"STRICT RULES:\\n1. Return ONLY JSON\\n2. No markdown (no ```)\\n3. Score must be integer 0-100\\n4. Only keys: score, fit, reason, opener\\n\\nFormat:\\n{\\\"score\\\": 0-100, \\\"fit\\\": \\\"hot|warm|cold\\\", \\\"reason\\\": \\\"text\\\", \\\"opener\\\": \\\"text\\\"}\\n\\nLead:\\nName: {{$json.name}}\\nTitle: {{$json.title}}\\nCompany: {{$json.company}}\",\n  \"stream\": false\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -528,
+        24
+      ],
+      "id": "4eab30c6-41bd-4908-ac34-019e49e402e7",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appsNHZSDjuDFD4Ef",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblqi80V12FXxPOQj",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Score": "={{$json.score}}",
+            "Name": "={{$json.name}}",
+            "Email": "={{ $json.email }}",
+            "Company": "={{ $json.company }}",
+            "Title": "={{ $json.title }}",
+            "Fit": "={{ $json.fit }}",
+            "Reason": "={{ $json.reason }}",
+            "Opener": "={{ $json.opener }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Title",
+              "displayName": "Title",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Score",
+              "displayName": "Score",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Fit",
+              "displayName": "Fit",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Reason",
+              "displayName": "Reason",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Opener",
+              "displayName": "Opener",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        368,
+        0
+      ],
+      "id": "b21fb1d7-5761-4ad6-aa15-a90f34198ed3",
+      "name": "Create a record",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "nLu6AY3G2kzRy3ZU",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -304,
+        96
+      ],
+      "id": "bd3d8a15-9d02-43a0-8400-4dbfdf6946cc",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1WdbQaxKoxHv-i_fYYxO8OqEbSljKYrBMey8jB7V4ckQ",
+          "mode": "list",
+          "cachedResultName": "LEAD_CLIENTS",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1WdbQaxKoxHv-i_fYYxO8OqEbSljKYrBMey8jB7V4ckQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1WdbQaxKoxHv-i_fYYxO8OqEbSljKYrBMey8jB7V4ckQ/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name ": "={{$json.fields.Name}}",
+            "Email": "={{$json.fields.Email}}",
+            "Company": "={{$json.fields.Company}}",
+            "Title ": "={{$json.fields.Title}}",
+            "Score ": "={{$json.fields.Score}}",
+            "Fit": "={{$json.fields.Fit}}",
+            "Opener": "={{$json.fields.Opener}}",
+            "Reason": "={{$json.fields.Reason}}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Name ",
+              "displayName": "Name ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Title ",
+              "displayName": "Title ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Score ",
+              "displayName": "Score ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Fit",
+              "displayName": "Fit",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reason",
+              "displayName": "Reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Opener",
+              "displayName": "Opener",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        368,
+        192
+      ],
+      "id": "2ce1e114-75e9-481e-8643-cb793d3d86f0",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "lCuufUmmFPvkyclt",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "filters": {}
+      },
+      "type": "n8n-nodes-base.hunter",
+      "typeVersion": 1,
+      "position": [
+        -976,
+        -96
+      ],
+      "id": "55eb55b6-b6b6-48db-ad69-2315f0980237",
+      "name": "Hunter"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Data": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Parse AI": {
+      "main": [
+        [
+          {
+            "node": "IF Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Score": {
+      "main": [
+        [
+          {
+            "node": "Create a record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email": {
+      "main": [
+        []
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Normalize Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Parse AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a record": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "798c76b4-742c-414d-ba36-1eed8e7d3e65",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a6194d1784a39b2889477305bb4f44427dfeda4795009e2fa87b0f4714c01841"
+  },
+  "id": "K3ZbaaN8gCgygD5D",
+  "tags": [
+    {
+      "updatedAt": "2026-03-30T20:13:53.628Z",
+      "createdAt": "2026-03-30T20:13:53.628Z",
+      "id": "25yQIVli9wnm7Ibl",
+      "name": "Shubham"
+    }
+  ]
+}
